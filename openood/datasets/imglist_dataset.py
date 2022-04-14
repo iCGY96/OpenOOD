@@ -76,8 +76,8 @@ def get_transforms(
             trn.ToTensor(),
             trn.Normalize(mean, std),
         ])
-    total_transform.transforms.append(
-        preprocessor.concat_transform(post_preprocessor_transform))
+    # total_transform.transforms.append(
+    #     preprocessor.concat_transform(post_preprocessor_transform))
 
     return total_transform
 

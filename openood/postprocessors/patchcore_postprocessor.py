@@ -66,51 +66,52 @@ class PatchcorePostprocessor(BasePostprocessor):
         self.embedding_list = []
 
         # load index
-        self.index = faiss.read_index(os.path.join('./results/','index.faiss'))
-        if torch.cuda.is_available():
-            res = faiss.StandardGpuResources()
-            self.index = faiss.index_cpu_to_gpu(res, 0 ,self.index)
-        self.init_results_list()
+        if(os.path.isfile('./results/index.faiss')):
+            self.index = faiss.read_index(os.path.join('./results/','index.faiss'))
+            if torch.cuda.is_available():
+                res = faiss.StandardGpuResources()
+                self.index = faiss.index_cpu_to_gpu(res, 0 ,self.index)
+            self.init_results_list()
+        else:
 
+            #training step
+            train_dataiter = iter(id_loader_dict['patch'])
 
-        # #training step
-        # train_dataiter = iter(id_loader_dict['patch'])
-
-        # for train_step in tqdm(range(1,
-        #                              len(train_dataiter) + 1),
-        #                        position=0,
-        #                        leave=True):
-        #     batch = next(train_dataiter)
-        #     target = batch['label'].cuda()
-        #     x = batch['data'].cuda()
-        #     features = self.model.forward(x, return_feature=True)
-        #     embeddings = []
-        #     for feature in features:
-        #         m = torch.nn.AvgPool2d(3, 1, 1)
-        #         embeddings.append(m(feature))
-        #     embedding = embedding_concat(embeddings[0], embeddings[1])
-        #     self.embedding_list.extend(reshape_embedding(np.array(embedding)))
+            for train_step in tqdm(range(1,
+                                        len(train_dataiter) + 1),
+                                position=0,
+                                leave=True):
+                batch = next(train_dataiter)
+                target = batch['label'].cuda()
+                x = batch['data'].cuda()
+                features = self.model.forward(x, return_feature=True)
+                embeddings = []
+                for feature in features:
+                    m = torch.nn.AvgPool2d(3, 1, 1)
+                    embeddings.append(m(feature))
+                embedding = embedding_concat(embeddings[0], embeddings[1])
+                self.embedding_list.extend(reshape_embedding(np.array(embedding)))
+                
+            #training end
+            total_embeddings = np.array(self.embedding_list)
             
-        # #training end
-        # total_embeddings = np.array(self.embedding_list)
-        
-        # # Random projection
-        # print("Random projection")
-        # self.randomprojector = SparseRandomProjection(n_components='auto', eps=0.9) # 'auto' => Johnson-Lindenstrauss lemma
-        # self.randomprojector.fit(total_embeddings)
-        # # Coreset Subsampling
-        # print("Coreset Subsampling")
-        # selector = kCenterGreedy(total_embeddings,0,0)
-        # selected_idx = selector.select_batch(model=self.randomprojector, already_selected=[], N=int(total_embeddings.shape[0]*self.postprocessor_args.coreset_sampling_ratio))
-        # self.embedding_coreset = total_embeddings[selected_idx]
-        
-        # print('initial embedding size : ', total_embeddings.shape)
-        # print('final embedding size : ', self.embedding_coreset.shape)
-        # #faiss
-        # print("faiss indexing")
-        # self.index = faiss.IndexFlatL2(self.embedding_coreset.shape[1])
-        # self.index.add(self.embedding_coreset) 
-        # faiss.write_index(self.index,  os.path.join('./results/','index.faiss'))
+            # Random projection
+            print("Random projection")
+            self.randomprojector = SparseRandomProjection(n_components='auto', eps=0.9) # 'auto' => Johnson-Lindenstrauss lemma
+            self.randomprojector.fit(total_embeddings)
+            # Coreset Subsampling
+            print("Coreset Subsampling")
+            selector = kCenterGreedy(total_embeddings,0,0)
+            selected_idx = selector.select_batch(model=self.randomprojector, already_selected=[], N=int(total_embeddings.shape[0]*self.postprocessor_args.coreset_sampling_ratio))
+            self.embedding_coreset = total_embeddings[selected_idx]
+            
+            print('initial embedding size : ', total_embeddings.shape)
+            print('final embedding size : ', self.embedding_coreset.shape)
+            #faiss
+            print("faiss indexing")
+            self.index = faiss.IndexFlatL2(self.embedding_coreset.shape[1])
+            self.index.add(self.embedding_coreset) 
+            faiss.write_index(self.index,  os.path.join('./results/','index.faiss'))
 
 
     def init_results_list(self):
